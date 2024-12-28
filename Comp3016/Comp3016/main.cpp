@@ -50,7 +50,7 @@ float deltaTime = 0.0f;
 //Last value of time change
 float lastFrame = 0.0f;
 
-#define RENDER_DISTANCE 64 //Render width of map
+#define RENDER_DISTANCE 64 //Render width of map (I don't have the ability for 128)
 #define MAP_SIZE RENDER_DISTANCE * RENDER_DISTANCE //Size of map in x & z space
 
 //Amount of chunks across one dimension
@@ -91,6 +91,8 @@ int main()
         return -1;
     }
 
+    glEnable(GL_DEPTH_TEST); // Enable depth so that the terrain is not see through, this makes it solid looking
+
     //Load shaders
     ShaderInfo shaders[] =
     {
@@ -118,16 +120,21 @@ int main()
     //Sets the noise scale
     TerrainNoise.SetFrequency(0.05f);
     //Generates a random seed between integers 0 & 100
-    int terrainSeed = rand() % 100;
+    int terrainSeed = static_cast<int>(time(0)); // seed created off of the time
     //Sets seed for noise
     TerrainNoise.SetSeed(terrainSeed);
 
-    //Biome noise
-    FastNoiseLite BiomeNoise;
-    BiomeNoise.SetNoiseType(FastNoiseLite::NoiseType_Cellular);
-    BiomeNoise.SetFrequency(0.05f);
-    int biomeSeed = rand() % 100;
-    BiomeNoise.SetSeed(biomeSeed);
+
+    //Assigning perlin noise type for hills to stop going too low
+    FastNoiseLite HillsNoise;
+    //Setting noise type to Perlin
+    HillsNoise.SetNoiseType(FastNoiseLite::NoiseType_Perlin);
+    //Sets the noise scale
+    HillsNoise.SetFrequency(0.05f);
+    //Generates a random seed between integers 0 & 100
+    int HillsSeed = static_cast<int>(time(0));
+    //Sets seed for noise
+    HillsNoise.SetSeed(HillsSeed);
 
     //Generation of height map vertices
     GLfloat terrainVertices[MAP_SIZE][6];
@@ -141,23 +148,54 @@ int main()
         {
 
             //Setting of height from 2D noise value at respective x & y coordinate
-            terrainVertices[i][1] = TerrainNoise.GetNoise((float)x, (float)y);
+            float height = TerrainNoise.GetNoise((float)x, (float)y);
 
-            //Retrieval of biome to set
-            float biomeValue = BiomeNoise.GetNoise((float)x, (float)y);
 
-            if (biomeValue <= -0.75f) //Plains
-            {
-                terrainVertices[i][3] = 0.0f;
-                terrainVertices[i][4] = 0.75f;
-                terrainVertices[i][5] = 0.25f;
-            }
-            else //Desert
+            if (height >= 0.4f) //Snow
             {
                 terrainVertices[i][3] = 1.0f;
                 terrainVertices[i][4] = 1.0f;
+                terrainVertices[i][5] = 1.0f;
+            }
+            else if (height > 0.0f) //Rock
+            {
+                terrainVertices[i][3] = 0.5f;
+                terrainVertices[i][4] = 0.5f;
                 terrainVertices[i][5] = 0.5f;
             }
+            else { // grass
+                if (height < -0.05f) {
+                    height = -0.1f;
+                    height += HillsNoise.GetNoise((float)x, (float)y) / 10; // use hills noise map when below the value.
+                }
+                float hill = HillsNoise.GetNoise((float)x, (float)y);
+                //float colourHeight = height + 1.1;
+                terrainVertices[i][3] = 0.0f;
+                terrainVertices[i][5] = 0.0f;
+                if (hill > 0.5)
+                {
+                    terrainVertices[i][4] = 0.9f;
+                }
+                else if (hill > 0.00)
+                {
+                    terrainVertices[i][4] = 0.7f;
+                }
+                else if (hill > -0.05)
+                {
+                    terrainVertices[i][4] = 0.5f;
+                }
+                else if (hill > -0.5)
+                {
+                    terrainVertices[i][4] = 0.4f;
+                }
+                else
+                {
+                    terrainVertices[i][4] = 0.3f;
+                }
+            
+            }
+
+            terrainVertices[i][1] = height;
 
             i++;
         }
@@ -275,6 +313,8 @@ int main()
     //Render loop
     while (glfwWindowShouldClose(window) == false)
     {
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // At the start of each frame it clears the depth
+
         //Time
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
