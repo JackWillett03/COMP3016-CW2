@@ -6,14 +6,12 @@
 #include "FastNoiseLite.h"
 //GLM
 #include "glm/ext/vector_float3.hpp"
-#include <glm/ext/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 
 using namespace std;
 using namespace glm;
 
-GLuint program;
 
 int windowHeight;
 int windowWidth;
@@ -36,13 +34,7 @@ vec3 cameraFront = vec3(0.0f, 0.0f, -1.0f);
 //Up position within world space
 vec3 cameraUp = vec3(0.0f, 1.0f, 0.0f);
 
-//Time
-//Time change
-float deltaTime = 0.0f;
-//Last value of time change
-float lastFrame = 0.0f;
-
-//Camera sideways rotation
+//Camera sidways rotation
 float cameraYaw = -90.0f;
 //Camera vertical rotation
 float cameraPitch = 0.0f;
@@ -52,7 +44,13 @@ bool mouseFirstEntry = true;
 float cameraLastXPos = 800.0f / 2.0f;
 float cameraLastYPos = 600.0f / 2.0f;
 
-#define RENDER_DISTANCE 128 //Render width of map
+//Time
+//Time change
+float deltaTime = 0.0f;
+//Last value of time change
+float lastFrame = 0.0f;
+
+#define RENDER_DISTANCE 64 //Render width of map
 #define MAP_SIZE RENDER_DISTANCE * RENDER_DISTANCE //Size of map in x & z space
 
 //Amount of chunks across one dimension
@@ -61,18 +59,6 @@ const int squaresRow = RENDER_DISTANCE - 1;
 const int trianglesPerSquare = 2;
 //Amount of triangles on map
 const int trianglesGrid = squaresRow * squaresRow * trianglesPerSquare;
-
-//Generation of height map vertices
-GLfloat terrainVertices[MAP_SIZE][6];
-
-//Positions to start drawing from
-float drawingStartPosition = 1.0f;
-float columnVerticesOffset = drawingStartPosition;
-float rowVerticesOffset = drawingStartPosition;
-
-int rowIndex = 0;
-
-
 
 
 int main()
@@ -95,9 +81,9 @@ int main()
     //Sets cursor to automatically bind to window & hides cursor pointer
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-
     //Binds OpenGL to window
     glfwMakeContextCurrent(window);
+
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
@@ -116,7 +102,7 @@ int main()
     program = LoadShaders(shaders);
     glUseProgram(program);
 
-
+    //Sets the viewport size within the window to match the window size of 1280x720
     glViewport(0, 0, 1280, 720);
 
     //Sets the framebuffer_size_callback() function as the callback for the window resizing event
@@ -125,94 +111,69 @@ int main()
     //Sets the mouse_callback() function as the callback for the mouse movement event
     glfwSetCursorPosCallback(window, mouse_callback);
 
-    float vertices[] = {
-        //Positions             //Textures
-        0.5f, 0.5f, 0.0f,       1.0f, 1.0f, //top right
-        0.5f, -0.5f, 0.0f,      1.0f, 0.0f, //bottom right
-        -0.5f, -0.5f, 0.0f,     0.0f, 0.0f, //bottom left
-        -0.5f, 0.5f, 0.0f,      0.0f, 1.0f  //top left
-    };
+    //Assigning perlin noise type for map
+    FastNoiseLite TerrainNoise;
+    //Setting noise type to Perlin
+    TerrainNoise.SetNoiseType(FastNoiseLite::NoiseType_Perlin);
+    //Sets the noise scale
+    TerrainNoise.SetFrequency(0.05f);
+    //Generates a random seed between integers 0 & 100
+    int terrainSeed = rand() % 100;
+    //Sets seed for noise
+    TerrainNoise.SetSeed(terrainSeed);
 
-    unsigned int indices[] = {
-        0, 1, 3, //first triangle
-        1, 2, 3 //second triangle
-    };
+    //Biome noise
+    FastNoiseLite BiomeNoise;
+    BiomeNoise.SetNoiseType(FastNoiseLite::NoiseType_Cellular);
+    BiomeNoise.SetFrequency(0.05f);
+    int biomeSeed = rand() % 100;
+    BiomeNoise.SetSeed(biomeSeed);
 
+    //Generation of height map vertices
+    GLfloat terrainVertices[MAP_SIZE][6];
 
-    //Sets index of VAO
-    glGenVertexArrays(NumVAOs, VAOs); //NumVAOs, VAOs
-    //Binds VAO to a buffer
-    glBindVertexArray(VAOs[0]); //VAOs[0]
-    //Sets indexes of all required buffer objects
-    glGenBuffers(NumBuffers, Buffers); //NumBuffers, Buffers
-    //glGenBuffers(1, &EBO);
+    //Terrain vertice index
+    int i = 0;
+    //Using x & y nested for loop in order to apply noise 2-dimensionally
+    for (int y = 0; y < RENDER_DISTANCE; y++)
+    {
+        for (int x = 0; x < RENDER_DISTANCE; x++)
+        {
 
-    //Gets index of colourIn uniform variable
-    GLint colourLocation = glGetUniformLocation(program, "colourIn");
-    //Sets colourIn
-    glUniform4f(colourLocation, 0.5f, -0.5f, 0.0f, 1.0f);
+            //Setting of height from 2D noise value at respective x & y coordinate
+            terrainVertices[i][1] = TerrainNoise.GetNoise((float)x, (float)y);
 
-    //Binds vertex object to array buffer
-    glBindBuffer(GL_ARRAY_BUFFER, Buffers[Triangles]);
-    //Allocates buffer memory for the vertices of the 'Triangles' buffer
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+            //Retrieval of biome to set
+            float biomeValue = BiomeNoise.GetNoise((float)x, (float)y);
 
-    //Binding & allocation for indices
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Buffers[Indices]);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+            if (biomeValue <= -0.75f) //Plains
+            {
+                terrainVertices[i][3] = 0.0f;
+                terrainVertices[i][4] = 0.75f;
+                terrainVertices[i][5] = 0.25f;
+            }
+            else //Desert
+            {
+                terrainVertices[i][3] = 1.0f;
+                terrainVertices[i][4] = 1.0f;
+                terrainVertices[i][5] = 0.5f;
+            }
 
+            i++;
+        }
+    }
 
-    //Allocation & indexing of vertex attribute memory for vertex shader
-//Positions
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
+    //Positions to start drawing from
+    float drawingStartPosition = 1.0f;
+    float columnVerticesOffset = drawingStartPosition;
+    float rowVerticesOffset = drawingStartPosition;
 
-    //Textures
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    //Unbinding
-    glBindVertexArray(0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-    unsigned int texture;
-    //Textures to generate
-    glGenTextures(1, &texture);
-
-    //Binding texture to type 2D texture
-    glBindTexture(GL_TEXTURE_2D, Buffers[Textures]);
-
-    //Selects x axis (S) of texture bound to GL_TEXTURE_2D & sets to repeat beyond normalised coordinates
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    //Selects y axis (T) equivalently
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-    //Parameters that will be sent & set based on retrieved texture
-    int width, height, colourChannels;
-
-    //Model matrix
-    mat4 model = mat4(1.0f);
-    //Scaling to zoom in
-    model = scale(model, vec3(2.0f, 2.0f, 2.0f));
-    //Looking straight forward
-    model = rotate(model, radians(0.0f), vec3(1.0f, 0.0f, 0.0f));
-    //Elevation to look upon terrain
-    model = translate(model, vec3(0.0f, -2.f, -1.5f));
-
-    //Projection matrix
-    mat4 projection = perspective(radians(45.0f), (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
-
+    int rowIndex = 0;
     for (int i = 0; i < MAP_SIZE; i++)
     {
         //Generation of x & z vertices for horizontal plane
         terrainVertices[i][0] = columnVerticesOffset;
-        terrainVertices[i][1] = 0.0f;
         terrainVertices[i][2] = rowVerticesOffset;
-
-        //Colour
-        terrainVertices[i][3] = 0.0f;
-        terrainVertices[i][4] = 0.75f;
-        terrainVertices[i][5] = 0.25f;
 
         //Shifts x position across for next triangle along grid
         columnVerticesOffset = columnVerticesOffset + -0.0625f;
@@ -268,6 +229,23 @@ int main()
         }
     }
 
+    //Sets index of VAO
+    glGenVertexArrays(NumVAOs, VAOs);
+    //Binds VAO to a buffer
+    glBindVertexArray(VAOs[0]);
+    //Sets indexes of all required buffer objects
+    glGenBuffers(NumBuffers, Buffers);
+    //glGenBuffers(1, &EBO);
+
+    //Binds vertex object to array buffer
+    glBindBuffer(GL_ARRAY_BUFFER, Buffers[Triangles]);
+    //Allocates buffer memory for the vertices of the 'Triangles' buffer
+    glBufferData(GL_ARRAY_BUFFER, sizeof(terrainVertices), terrainVertices, GL_STATIC_DRAW);
+
+    //Binding & allocation for indices
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Buffers[Indices]);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(terrainIndices), terrainIndices, GL_STATIC_DRAW);
+
     //Allocation & indexing of vertex attribute memory for vertex shader
     //Positions
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
@@ -276,6 +254,23 @@ int main()
     //Colours
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+
+    //Unbinding
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    //Model matrix
+    mat4 model = mat4(1.0f);
+    //Scaling to zoom in
+    model = scale(model, vec3(2.0f, 2.0f, 2.0f));
+    //Looking straight forward
+    model = rotate(model, radians(0.0f), vec3(1.0f, 0.0f, 0.0f));
+    //Elevation to look upon terrain
+    model = translate(model, vec3(0.0f, -2.f, -1.5f));
+
+    //Projection matrix
+    mat4 projection = perspective(radians(45.0f), (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
 
     //Render loop
     while (glfwWindowShouldClose(window) == false)
@@ -300,17 +295,13 @@ int main()
         glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, value_ptr(mvp));
 
         //Drawing
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glBindVertexArray(VAOs[0]); //Bind buffer object to render; VAOs[0]
+        glBindVertexArray(VAOs[0]);
         glDrawElements(GL_TRIANGLES, MAP_SIZE * 32, GL_UNSIGNED_INT, 0);
-
 
         //Refreshing
         glfwSwapBuffers(window); //Swaps the colour buffer
         glfwPollEvents(); //Queries all GLFW events
     }
-
-
 
     //Safely terminates GLFW
     glfwTerminate();
@@ -322,35 +313,6 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     //Resizes window based on contemporary width & height values
     glViewport(0, 0, width, height);
-}
-
-void ProcessUserInput(GLFWwindow* WindowIn)
-{
-    //Closes window on 'exit' key press
-    if (glfwGetKey(WindowIn, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-    {
-        glfwSetWindowShouldClose(WindowIn, true);
-    }
-
-    //Extent to which to move in one instance
-    const float movementSpeed = 1.0f * deltaTime;
-    //WASD controls
-    if (glfwGetKey(WindowIn, GLFW_KEY_W) == GLFW_PRESS)
-    {
-        cameraPosition += movementSpeed * cameraFront;
-    }
-    if (glfwGetKey(WindowIn, GLFW_KEY_S) == GLFW_PRESS)
-    {
-        cameraPosition -= movementSpeed * cameraFront;
-    }
-    if (glfwGetKey(WindowIn, GLFW_KEY_A) == GLFW_PRESS)
-    {
-        cameraPosition -= normalize(cross(cameraFront, cameraUp)) * movementSpeed;
-    }
-    if (glfwGetKey(WindowIn, GLFW_KEY_D) == GLFW_PRESS)
-    {
-        cameraPosition += normalize(cross(cameraFront, cameraUp)) * movementSpeed;
-    }
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
@@ -396,4 +358,33 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
     direction.y = sin(radians(cameraPitch));
     direction.z = sin(radians(cameraYaw)) * cos(radians(cameraPitch));
     cameraFront = normalize(direction);
-} 
+}
+
+void ProcessUserInput(GLFWwindow* WindowIn)
+{
+    //Closes window on 'exit' key press
+    if (glfwGetKey(WindowIn, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    {
+        glfwSetWindowShouldClose(WindowIn, true);
+    }
+
+    //Extent to which to move in one instance
+    const float movementSpeed = 1.0f * deltaTime;
+    //WASD controls
+    if (glfwGetKey(WindowIn, GLFW_KEY_W) == GLFW_PRESS)
+    {
+        cameraPosition += movementSpeed * cameraFront;
+    }
+    if (glfwGetKey(WindowIn, GLFW_KEY_S) == GLFW_PRESS)
+    {
+        cameraPosition -= movementSpeed * cameraFront;
+    }
+    if (glfwGetKey(WindowIn, GLFW_KEY_A) == GLFW_PRESS)
+    {
+        cameraPosition -= normalize(cross(cameraFront, cameraUp)) * movementSpeed;
+    }
+    if (glfwGetKey(WindowIn, GLFW_KEY_D) == GLFW_PRESS)
+    {
+        cameraPosition += normalize(cross(cameraFront, cameraUp)) * movementSpeed;
+    }
+}
