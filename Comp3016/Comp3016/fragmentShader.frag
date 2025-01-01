@@ -1,12 +1,8 @@
-#version 460
-//Colour value to send to next stage
+#version 330 core
+in vec3 Color;  // Input color from the vertex shader
+
 out vec4 FragColor;
 
-//Colour coordinates from last stage
-in vec3 colourFrag;
-
-void main()
-{
-    //Setting of colour coordinates to colour map
-    FragColor = vec4(colourFrag, 1.0f);
+void main() {
+    FragColor = vec4(Color, 1.0);
 }

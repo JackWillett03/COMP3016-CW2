@@ -149,6 +149,8 @@
     <ClInclude Include="stb_image.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="carfragmentShader.frag" />
+    <None Include="carvertexShader.vert" />
     <None Include="fragmentShader.frag" />
     <None Include="vertexShader.vert" />
   </ItemGroup>

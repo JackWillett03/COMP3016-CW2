@@ -7,6 +7,7 @@
 //GLM
 #include "glm/ext/vector_float3.hpp"
 #include <glm/gtc/type_ptr.hpp>
+#include "stb_image.h"
 
 
 using namespace std;
@@ -60,6 +61,27 @@ const int trianglesPerSquare = 2;
 //Amount of triangles on map
 const int trianglesGrid = squaresRow * squaresRow * trianglesPerSquare;
 
+float carVertices[] = { // cube
+    0.5f, 0.5f, 0.5f, 1.0f, 0.0f,  
+    -0.5f, 0.5f, 0.5f, 0.0f, 0.0f,
+    0.5f, -0.5f, 0.5f, 1.0f, 1.0f,  
+    -0.5f, -0.5f, 0.5f, 0.0f, 1.0f,
+    0.5f, 0.5f, -0.5f, 1.0f, 0.0f,  
+    -0.5f, 0.5f, -0.5f, 0.0f, 0.0f,
+    0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 
+    -0.5f, -0.5f, -0.5f, 0.0f, 1.0f
+};
+
+
+unsigned int carIndices[] = {
+    0, 1, 2, 2, 1, 3,  // Front
+    4, 5, 6, 6, 5, 7,  // Back
+    0, 1, 4, 4, 1, 5,  // Top 
+    2, 3, 6, 6, 3, 7,  // Bottom
+    0, 2, 4, 4, 2, 6,  // Left
+    1, 3, 5, 5, 3, 7   // Right
+};
+
 
 int main()
 {
@@ -101,8 +123,16 @@ int main()
         { GL_NONE, NULL }
     };
 
-    program = LoadShaders(shaders);
-    glUseProgram(program);
+    //Load shaders for car
+    ShaderInfo carshaders[] =
+    {
+        { GL_VERTEX_SHADER, "carvertexShader.vert" },
+        { GL_FRAGMENT_SHADER, "carfragmentShader.frag" },
+        { GL_NONE, NULL }
+    };
+
+    terrainProgram = LoadShaders(shaders); // set programs so can switch between shaders
+    carProgram = LoadShaders(carshaders);
 
     //Sets the viewport size within the window to match the window size of 1280x720
     glViewport(0, 0, 1280, 720);
@@ -157,7 +187,7 @@ int main()
                 terrainVertices[i][4] = 1.0f;
                 terrainVertices[i][5] = 1.0f;
             }
-            else if (height > 0.0f) //Rock
+            else if (height > 0.0f) //Rocks
             {
                 terrainVertices[i][3] = 0.5f;
                 terrainVertices[i][4] = 0.5f;
@@ -168,11 +198,10 @@ int main()
                     height = -0.1f;
                     height += HillsNoise.GetNoise((float)x, (float)y) / 10; // use hills noise map when below the value.
                 }
-                float hill = HillsNoise.GetNoise((float)x, (float)y);
-                //float colourHeight = height + 1.1;
+                float hill = HillsNoise.GetNoise((float)x, (float)y); // height map was created for the grass so it didn't make canyons
                 terrainVertices[i][3] = 0.0f;
                 terrainVertices[i][5] = 0.0f;
-                if (hill > 0.5)
+                if (hill > 0.5) // different coloured grass to make height differences easier to see
                 {
                     terrainVertices[i][4] = 0.9f;
                 }
@@ -298,17 +327,95 @@ int main()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
+    //Sets index of VAO
+    glGenVertexArrays(NumVAOs, VAOs + 1); //NumVAOs, VAOs
+    //Binds VAO to a buffer
+    glBindVertexArray(VAOs[1]); //VAOs[0]
+    //Sets indexes of all required buffer objects
+    glGenBuffers(NumBuffers, Buffers); //NumBuffers, Buffers
+    //glGenBuffers(1, &EBO);
+
+    //Binds vertex object to array buffer
+    glBindBuffer(GL_ARRAY_BUFFER, Buffers[Triangles]); //Buffers[Triangles]
+    //Allocates buffer memory for the vertices of the 'Triangles' buffer
+    glBufferData(GL_ARRAY_BUFFER, sizeof(carVertices), carVertices, GL_STATIC_DRAW);
+
+    //Binding & allocation for indices
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Buffers[Indices]); //Buffers[Indices]
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(carIndices), carIndices, GL_STATIC_DRAW);
+
+    //Allocation & indexing of vertex attribute memory for vertex shader
+    //Positions
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    //Textures
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    //Unbinding
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+
+    //Texture index
+    unsigned int texture;
+    //Textures to generate
+    glGenTextures(1, &texture);
+
+    //Binding texture to type 2D texture
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    //Selects x axis (S) of texture bound to GL_TEXTURE_2D & sets to repeat beyond normalised coordinates
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    //Selects y axis (T) equivalently
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    //Parameters that will be sent & set based on retrieved texture
+    int width, height, colourChannels;
+    //Retrieves texture data
+    unsigned char* data = stbi_load("media/carfront.jpg", &width, &height, &colourChannels, 0);
+
+    if (data) //If retrieval successful
+    {
+        //Generation of texture from retrieved texture data
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        //Automatically generates all required mipmaps on bound texture
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else //If retrieval unsuccessful
+    {
+        cout << "Failed to load texture.\n";
+        return -1;
+    }
+
+    //Clears retrieved texture from memory
+    stbi_image_free(data);
+
+
+
+
     //Model matrix
     mat4 model = mat4(1.0f);
-    //Scaling to zoom in
+
     model = scale(model, vec3(2.0f, 2.0f, 2.0f));
-    //Looking straight forward
+
     model = rotate(model, radians(0.0f), vec3(1.0f, 0.0f, 0.0f));
-    //Elevation to look upon terrain
+
     model = translate(model, vec3(0.0f, -2.f, -1.5f));
 
     //Projection matrix
     mat4 projection = perspective(radians(45.0f), (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
+
+    //Model matrix for car
+    mat4 carmodel = mat4(1.0f);
+
+    carmodel = scale(model, vec3(2.0f, 2.0f, 2.0f));
+
+    carmodel = rotate(model, radians(0.0f), vec3(1.0f, 0.0f, 0.0f));
+
+    carmodel = translate(carmodel, vec3(0.0f, -2.f, -1.5f));
 
     //Render loop
     while (glfwWindowShouldClose(window) == false)
@@ -320,8 +427,11 @@ int main()
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
+        // Car position
+        vec3 carPosition = vec3(carmodel[3][0], carmodel[3][1], carmodel[3][2]);
+
         //Input
-        ProcessUserInput(window); //Takes user input
+        ProcessUserInput(window, carPosition); //Takes user input
 
         //Rendering
         glClearColor(0.25f, 0.0f, 1.0f, 1.0f); //Colour to display on cleared window
@@ -330,13 +440,21 @@ int main()
         //Transformations
         mat4 view = lookAt(cameraPosition, cameraPosition + cameraFront, cameraUp); //Sets the position of the viewer, the movement direction in relation to it & the world up direction
         mat4 mvp = projection * view * model;
-        int mvpLoc = glGetUniformLocation(program, "mvpIn");
+        glUseProgram(terrainProgram); // specifiy what shaders we use
+        int mvpLoc = glGetUniformLocation(terrainProgram, "mvpIn");
 
         glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, value_ptr(mvp));
 
         //Drawing
         glBindVertexArray(VAOs[0]);
         glDrawElements(GL_TRIANGLES, MAP_SIZE * 32, GL_UNSIGNED_INT, 0);
+
+        mat4 carMVP = projection * view * carmodel;
+        glUseProgram(carProgram); // specifiy what shaders we use
+        mvpLoc = glGetUniformLocation(carProgram, "mvpIn");
+        glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, value_ptr(carMVP));
+        glBindVertexArray(VAOs[1]);
+        glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
 
         //Refreshing
         glfwSwapBuffers(window); //Swaps the colour buffer
@@ -400,7 +518,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
     cameraFront = normalize(direction);
 }
 
-void ProcessUserInput(GLFWwindow* WindowIn)
+void ProcessUserInput(GLFWwindow* WindowIn, vec3& carPosition)
 {
     //Closes window on 'exit' key press
     if (glfwGetKey(WindowIn, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -410,7 +528,7 @@ void ProcessUserInput(GLFWwindow* WindowIn)
 
     //Extent to which to move in one instance
     const float movementSpeed = 1.0f * deltaTime;
-    //WASD controls
+    //WASD controls move the camera
     if (glfwGetKey(WindowIn, GLFW_KEY_W) == GLFW_PRESS)
     {
         cameraPosition += movementSpeed * cameraFront;

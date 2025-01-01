@@ -1,19 +1,12 @@
-#version 460
-//Triangle position with values retrieved from main.cpp
-layout (location = 0) in vec3 position;
-//Colour coordinates from last stage
-layout (location = 1) in vec3 colourVertex;
+#version 330 core
+layout(location = 0) in vec3 aPosition;  // Position
+layout(location = 1) in vec3 aColor;     // Vertex Color
 
-//Model-View-Projection Matrix
-uniform mat4 mvpIn;
+out vec3 Color;  // Output color to fragment shader
 
-//Colour to send
-out vec3 colourFrag;
+uniform mat4 mvpIn; 
 
-void main()
-{
-    //Transformation applied to vertices
-    gl_Position = mvpIn * vec4(position.x, position.y, position.z, 1.0);
-    //Sending texture coordinates to next stage
-    colourFrag = colourVertex;
+void main() {
+    gl_Position = mvpIn * vec4(aPosition, 1.0);
+    Color = aColor;  // Pass color to fragment shader
 }
