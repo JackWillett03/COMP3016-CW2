@@ -77,7 +77,7 @@ I believe the main issue I had was time management, I did not give myself enough
 </br> </br>
 
 ## External sources: </br> 
-A large portion of the code especially the setup is from the labs sessions. I used StackOverflow to help with errors and researching around the shaders for the cube, [ glEnable function (Gl.h) - Win32 apps | Microsoft Learn](https://learn.microsoft.com/en-us/windows/win32/opengl/glenable) - for the depth testing to make it non see through, Reddit (r/opengl) - mainly looking for shaders and shader errors for cubes. </br>
+A large portion of the code especially the setup is from the labs sessions. I used StackOverflow to help with errors and researching around the shaders for the cube, [ glEnable function (Gl.h) - Win32 apps | Microsoft Learn](https://learn.microsoft.com/en-us/windows/win32/opengl/glenable) - for the depth testing to make it non see through, Reddit (r/opengl) - mainly looking for shaders and shader errors for cubes and learnopengl.com </br>
 </br>
 My original contribution to this project is the car (cube) and its textures along with the terrain generation having 2 generations in one map creating the hills biomes inbetween the mountains instead of just having large valleys.
 
