@@ -1,7 +1,7 @@
 #include <glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
-#include "LoadShaders.h"
+#include "../shaders/LoadShaders.h"
 #include "main.h"
 #include "FastNoiseLite.h"
 //GLM
